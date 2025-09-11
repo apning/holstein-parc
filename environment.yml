@@ -1,0 +1,23 @@
+name: holstein-parc
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pytorch
+  - numpy
+  - matplotlib
+  - pillow
+  - ipython
+  - tqdm
+  - tensorboard
+  - jupyterlab
+  - pip
+  - pip:
+      - -e .
+  # C++ toolchain for simulator (optional unless building qdyn)
+  - compilers
+  - make
+  - armadillo
+  - arpack
+
