@@ -1,5 +1,7 @@
 ## Holstein PARC
 
+[![arXiv](https://img.shields.io/badge/arXiv-2412.06631-b31b1b.svg)](https://arxiv.org/abs/2412.06631)
+
 ### Environment
 
 Use the provided environment file *(run from the project root)*:
