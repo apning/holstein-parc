@@ -49,7 +49,79 @@ CONFIG_NAMED_KWARGS = {
         "suppress_tqdm": True,
         "save_checkpoint_period": 1,
     },
+    # Training modifications
+    "deep-fast_train-1a": {
+        "sub_name": "deep-fast_train-1a",
+        "cirriculum_name": "deep_quench-2a",
+        "lr": 1e-3,
+        "eta_min_scalar": 1e-5,
+        "lr_scheduler_linear_decay_multiplier": 0.0,
+        "weight_decay": 1e-2,
+    },
+    "cosine_lr_modifier": {
+        "sub_name": "cosine_lr_modifier",
+        "lr_scheduler": "cosine",
+        "lr_scheduler_linear_decay_multiplier": None
+    },
+    "lr_1e-4" : {
+        "sub_name": "lr_1e-4",
+        "lr": 1e-4
+    },
+    "vpe_1024": {
+        "sub_name": "vpe_1024",
+        "virtual_epoch_size": 1024
+    },
+    # Scaling series data modifications
+    "deep_scaling_series_si_32": {
+        "sub_name": "deep_scaling_series_si_32",
+        "data_names": ["L-32-g_0_1-rd-1e-04-si_32-ps_6400-steps_8192-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "deep_scaling_series_si_64": {
+        "sub_name": "deep_scaling_series_si_64",
+        "data_names": ["L-32-g_0_1-rd-1e-04-si_64-ps_6400-steps_4096-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "deep_scaling_series_si_128": {
+        "sub_name": "deep_scaling_series_si_128",
+        "data_names": ["L-32-g_0_1-rd-1e-04-si_128-ps_6400-steps_2048-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "deep_scaling_series_si_256": {
+        "sub_name": "deep_scaling_series_si_256",
+        "data_names": ["L-32-g_0_1-rd-1e-04-si_256-ps_6400-steps_1024-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "deep_scaling_series_si_512": {
+        "sub_name": "deep_scaling_series_si_512",
+        "data_names": ["L-32-g_0_1-rd-1e-04-si_512-ps_6400-steps_512-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "deep_scaling_series_si_1024": {
+        "sub_name": "deep_scaling_series_si_1024",
+        "data_names": ["L-32-g_0_1-rd-1e-04-si_1024-ps_6400-steps_256-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "deep_scaling_series_si_2048": {
+        "sub_name": "deep_scaling_series_si_2048",
+        "data_names": ["L-32-g_0_1-rd-1e-04-si_2048-ps_6400-steps_128-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
     # Models
+    "large_parc_model": {
+        "sub_name": "large_parc_model",
+        "channels": 512,
+        "n_blocks": 8,
+        "kernel_size": 3,
+        "use_residual_scalar": False,
+        "act_func": nn.Tanh(),
+        "init_method": "xavier_uniform",
+        "zero_initialize_output": True,
+        "dtype": torch.float32,
+        "use_layernorm": True,
+        "simple_cnn": False,
+        "use_derivatives": True,
+    },
     "medium_parc_model": {
         "sub_name": "medium_parc_model",
         "channels": 128,

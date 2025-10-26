@@ -21,7 +21,7 @@ from src.training_utils import (
     batch_to_loss,
     calc_val_stats,
     create_interpolated_lr_dict_for_optim,
-    get_cosine_annealing_restart_warmup_scheduler,
+    CosineAnnealingRestartWarmupLR,
 )
 from src.utils import (
     Min_n_Items,
@@ -181,18 +181,33 @@ def train(config: Config):
 
     ## Create scheduler
     assert config.virtual_epoch_size is not None, (
-        "Use of custom staged cosine annealing with restarts scheduler is currently not available without using a virtual epoch loader as calculations of exact stage lengths would be more complicated without virtual epoch loader and this has yet to be implemented"
+        "Use of learning rate scheduler is currently not available without using a virtual epoch loader as calculations of exact stage lengths would be more complicated without virtual epoch loader"
     )  # More complicated as with different dataset settings (eg different step prediction values) the dataset size can vary
+
     stage_lengths = [
         stage["epochs"] * config.virtual_epoch_size * (stage.get("virtual_epoch_multiplier") or 1)
         for stage in cirriculum
     ]
-    scheduler = get_cosine_annealing_restart_warmup_scheduler(
-        optimizer,
-        stage_lengths=stage_lengths,
-        warmup_steps=config.warmup_steps,
-        eta_min=config.lr * config.eta_min_scalar,
-    )
+
+    if config.lr_scheduler == "cosine_annealing_restarts":
+        scheduler = CosineAnnealingRestartWarmupLR(
+            optimizer,
+            stage_lengths=stage_lengths,
+            warmup_steps=config.warmup_steps,
+            eta_min=config.lr * config.eta_min_scalar,
+            linear_decay=config.lr_scheduler_linear_decay_multiplier
+        )
+    elif config.lr_scheduler == "cosine":
+        if config.lr_scheduler_linear_decay_multiplier is not None:
+            raise ValueError(f"config.lr_scheduler_linear_decay_multiplier is not for use with lr scheduler 'cosine'")
+        scheduler = CosineAnnealingRestartWarmupLR(
+            optimizer,
+            stage_lengths=[sum(stage_lengths)],
+            warmup_steps=config.warmup_steps,
+            eta_min=config.lr * config.eta_min_scalar
+        )
+    else:
+        raise ValueError(f"{config.lr_scheduler} is not a valid lr scheduler")
 
     # Scheduler state must be restored BEFORE optimizer state: https://github.com/pytorch/pytorch/issues/119168
     if config.lr_scheduler_path is not None:
@@ -449,6 +464,8 @@ def train(config: Config):
 
     training_end_time = datetime.now()
     training_time_elapsed = training_end_time - training_start_time
+
+    writer.close()
 
     print("Training complete!")
     print(f"Time Elapsed: {training_time_elapsed}")

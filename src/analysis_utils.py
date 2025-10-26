@@ -295,7 +295,7 @@ def plot_comparison(
     # Display grid
     ax.grid(True)
     if not disable_text:
-        ax.legend()
+        ax.legend(fontsize=fontsize)
 
     if title is not None and not disable_text:
         ax.set_title(title, fontsize=fontsize)
@@ -640,7 +640,7 @@ def compare_cdw_order_autocorrelation(
     return return_dict or None
 
 
-def plot_label_cdw_order_autocorrelation(labels, max_lag: int, group_avg: bool = False, pltargs: PLTArgs | None = None):
+def plot_label_cdw_order_autocorrelation(labels, max_lag: int, group_avg: bool = True, pltargs: PLTArgs | None = None):
     """
     Plot autocorrelation function of CDW order parameters for labels only.
 
@@ -896,7 +896,7 @@ def Q_and_P_diffs_at_step(labels, preds, step=1, pltargs: PLTArgs | None = None)
         return {"Q_img": Q_img, "P_img": P_img}
 
 
-def calc_autocorrelation(traj: np.ndarray, lag: int, group_avg: bool = False):
+def calc_autocorrelation(traj: np.ndarray, lag: int, group_avg: bool = True):
     """
     Calculate autocorrelation of a trajectory at a specific lag.
 
@@ -943,7 +943,7 @@ def calc_autocorrelation(traj: np.ndarray, lag: int, group_avg: bool = False):
     return autocorrelation
 
 
-def calc_autocorrelation_traj(traj: np.ndarray, max_lag: int, group_avg: bool = False):
+def calc_autocorrelation_traj(traj: np.ndarray, max_lag: int, group_avg: bool = True):
     """
     Calculate autocorrelation function for all lags from 0 to max_lag.
 
