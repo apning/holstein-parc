@@ -64,7 +64,7 @@ To generate data for a system with:
     * L = 32 (system size)
     * Shallow quench from 0.5 to 0.8
     * 1200 prediction steps per trajectory
-        * Prediction step size of 2.56 time units
+        * Prediction step size of 0.64 time units
 
 From project root, run:
 ```bash
