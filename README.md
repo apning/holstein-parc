@@ -61,6 +61,7 @@ python data/datagen.py --n_train=1228 --n_val=32 --n_test=256 --n_workers=32 --d
 
 
 To generate data for a system with:
+
     * L = 32 (system size)
     * Shallow quench from 0.5 to 0.8
     * 1200 prediction steps per trajectory
