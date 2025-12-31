@@ -49,6 +49,26 @@ CONFIG_NAMED_KWARGS = {
         "suppress_tqdm": True,
         "save_checkpoint_period": 1,
     },
+    "L_32-quench_0p5_0p8-steps_1200-training-v2": {
+        "name": "L_32-quench_0p5_0p8-steps_1200-training-v2",
+        # Data variables
+        # "data_names": ["L-32-g_0p5_0p8-rd-1e-04-si_64-steps_1200-zero_mom-MID"],
+        "data_scalars": None,  # delete later when uncommenting data_names
+        # Val data details
+        "val_batch_size": 128,
+        "val_n_step_prediction": 64,
+        # Training details
+        "cirriculum_name": "shallow_quench-2a",
+        "batch_size": 128,
+        "dropout": 0.2,
+        "weight_decay": 1e-2,
+        "eta_min_scalar": 0,
+        "lr": 1e-3,
+        "lr_scheduler_linear_decay_multiplier": 0.0,
+        # Convenience features
+        "suppress_tqdm": True,
+        "save_checkpoint_period": 1,
+    },
     # Training modifications
     "deep-fast_train-1a": {
         "sub_name": "deep-fast_train-1a",
@@ -61,16 +81,10 @@ CONFIG_NAMED_KWARGS = {
     "cosine_lr_modifier": {
         "sub_name": "cosine_lr_modifier",
         "lr_scheduler": "cosine",
-        "lr_scheduler_linear_decay_multiplier": None
+        "lr_scheduler_linear_decay_multiplier": None,
     },
-    "lr_1e-4" : {
-        "sub_name": "lr_1e-4",
-        "lr": 1e-4
-    },
-    "vpe_1024": {
-        "sub_name": "vpe_1024",
-        "virtual_epoch_size": 1024
-    },
+    "lr_1e-4": {"sub_name": "lr_1e-4", "lr": 1e-4},
+    "vpe_1024": {"sub_name": "vpe_1024", "virtual_epoch_size": 1024},
     # Scaling series data modifications
     "deep_scaling_series_si_32": {
         "sub_name": "deep_scaling_series_si_32",
@@ -105,6 +119,42 @@ CONFIG_NAMED_KWARGS = {
     "deep_scaling_series_si_2048": {
         "sub_name": "deep_scaling_series_si_2048",
         "data_names": ["L-32-g_0_1-rd-1e-04-si_2048-ps_6400-steps_128-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    ## Shallow scaling series
+    "shallow_scaling_series_si_32": {
+        "sub_name": "shallow_scaling_series_si_32",
+        "data_names": ["L-32-g_0p5_0p8-rd-1e-04-si_32-steps_2048-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "shallow_scaling_series_si_64": {
+        "sub_name": "shallow_scaling_series_si_64",
+        "data_names": ["L-32-g_0p5_0p8-rd-1e-04-si_64-steps_1024-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "shallow_scaling_series_si_128": {
+        "sub_name": "shallow_scaling_series_si_128",
+        "data_names": ["L-32-g_0p5_0p8-rd-1e-04-si_128-steps_512-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "shallow_scaling_series_si_256": {
+        "sub_name": "shallow_scaling_series_si_256",
+        "data_names": ["L-32-g_0p5_0p8-rd-1e-04-si_256-steps_256-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "shallow_scaling_series_si_512": {
+        "sub_name": "shallow_scaling_series_si_512",
+        "data_names": ["L-32-g_0p5_0p8-rd-1e-04-si_512-steps_128-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "shallow_scaling_series_si_1024": {
+        "sub_name": "shallow_scaling_series_si_1024",
+        "data_names": ["L-32-g_0p5_0p8-rd-1e-04-si_1024-steps_64-zero_mom-MID-SCALING_SERIES"],
+        "data_scalars": "same_as_data",
+    },
+    "shallow_scaling_series_si_2048": {
+        "sub_name": "shallow_scaling_series_si_2048",
+        "data_names": ["L-32-g_0p5_0p8-rd-1e-04-si_2048-steps_32-zero_mom-MID-SCALING_SERIES"],
         "data_scalars": "same_as_data",
     },
     # Models

@@ -1,11 +1,9 @@
-# Standard library imports
 import io
 import math
 from collections import namedtuple
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-# Third-party imports
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -14,7 +12,6 @@ from PIL import Image, ImageOps
 from IPython.display import display
 from tqdm.auto import tqdm
 
-# Local imports
 from src.data_utils import unpickle_data
 from src.utils import select_best_device
 from src.physics import calc_charge_order, calc_lattice_order
@@ -330,16 +327,57 @@ def plot_comparison(
         return image
 
 
-def gen_preds(
-    model, initial_condition: Sequence[NDArray, NDArray, NDArray], n_steps: int, device: None | torch.device = True, suppress_output: bool = False
+def _gen_preds(
+    model,
+    initial_conditions: Sequence[NDArray, NDArray, NDArray],
+    n_steps: int,
+    device: torch.device,
+    suppress_output: bool = False,
 ) -> tuple[NDArray, NDArray, NDArray]:
     """
-    Helper method to generate multi-step trajectory predictions from a batch of initial conditions.
+    Core prediction logic for generating multi-step trajectory predictions.
+
+    Args:
+        model: Prediction model (already on device and in eval mode).
+        initial_conditions (Sequence[NDArray, NDArray, NDArray]): Tuple of (rho, Q, P) label arrays representing the initial conditions. Shape of rho array should be [batch, L, L]. Shape of Q and P should be [batch, L]
+        n_steps (int): Number of steps to predict for
+        device (torch.device): PyTorch device.
+        suppress_output (bool): If True, suppress progress bar output.
+
+    Returns:
+        tuple[NDArray, NDArray, NDArray]: Predicted trajectories (rho, Q, P).
+    """
+
+    # Prep input data
+    preds = [[comp] for comp in initial_conditions]
+    inputs = [torch.tensor(comp).to(device) for comp in initial_conditions]
+
+    with torch.no_grad():
+        for _ in tqdm(range(n_steps), desc="Steps", leave=False, disable=suppress_output):
+            inputs = model(*inputs)
+            [pred.append(comp.cpu().numpy()) for pred, comp in zip(preds, inputs)]
+
+    preds = tuple(np.stack(pred, axis=1) for pred in preds)
+
+    return preds
+
+
+def gen_preds(
+    model,
+    initial_conditions: Sequence[NDArray, NDArray, NDArray],
+    n_steps: int,
+    max_batch_size: int | None = None,
+    device: None | torch.device = None,
+    suppress_output: bool = False,
+) -> tuple[NDArray, NDArray, NDArray]:
+    """
+    Generate multi-step trajectory predictions from a batch of initial conditions.
 
     Args:
         model: Prediction model.
-        initial_condition (Sequence[NDArray, NDArray, NDArray]): Tuple of (rho, Q, P) label arrays representing the initial conditions. Shape of rho array should be [batch, L, L]. Shape of Q and P should be [batch, L]
+        initial_conditions (Sequence[NDArray, NDArray, NDArray]): Tuple of (rho, Q, P) label arrays representing the initial conditions. Shape of rho array should be [batch, L, L]. Shape of Q and P should be [batch, L]
         n_steps (int): Number of steps to predict for
+        max_batch_size (int | None): Maximum batch size. If None, process all data at once.
         device (None | torch.device): PyTorch device. If None, one will automatically be chosen.
         suppress_output (bool): If True, suppress progress bar output.
 
@@ -348,7 +386,7 @@ def gen_preds(
     """
 
     # Shape checks
-    rho, Q, P = initial_condition
+    rho, Q, P = initial_conditions
     if rho.ndim != 3:
         raise ValueError(f"rho has invalid shape! Expected 3, got shape {rho.shape}")
     if Q.ndim != 2:
@@ -365,16 +403,26 @@ def gen_preds(
     was_training = model.training
     model.eval()
 
-    # Prep input data
-    preds = [[comp] for comp in initial_condition]
-    inputs = [torch.tensor(comp).to(device) for comp in initial_condition]
+    n_batches = len(rho)
+    if max_batch_size is None:
+        max_batch_size = n_batches
 
-    with torch.no_grad():
-        for _ in tqdm(range(n_steps), desc="Steps", leave=False, disable=suppress_output):
-            inputs = model(*inputs)
-            [pred.append(comp.cpu().numpy()) for pred, comp in zip(preds, inputs)]
+    # If data is too large for max_batch_size, generate it in mulitple mini-batches
+    predicted_batches = []
+    for i in tqdm(range(math.ceil(n_batches / max_batch_size)), desc="Batch", leave=False, disable=suppress_output):
+        initial_conditions_subset = tuple(
+            comp[i * max_batch_size : (i + 1) * max_batch_size] for comp in initial_conditions
+        )
+        predictions_subset = _gen_preds(
+            model=model,
+            initial_conditions=initial_conditions_subset,
+            n_steps=n_steps,
+            device=device,
+            suppress_output=suppress_output,
+        )
+        predicted_batches.append(predictions_subset)
 
-    preds = [np.stack(pred, axis=1) for pred in preds]
+    preds = tuple(np.concatenate(batched_comp_preds, axis=0) for batched_comp_preds in zip(*predicted_batches))
 
     model.train(was_training)
 
@@ -386,7 +434,7 @@ def gen_preds_like(
     labels: Sequence[NDArray, NDArray, NDArray] | None = None,
     labels_path: str | None = None,
     max_batch_size: int = 64,
-    device: None | torch.device =None,
+    device: None | torch.device = None,
     suppress_output: bool = False,
 ) -> tuple[NDArray, NDArray, NDArray]:
     """
@@ -418,22 +466,17 @@ def gen_preds_like(
     if P.ndim != 3:
         raise ValueError(f"P has invalid shape! Expected 3, got shape {P.shape}")
 
-    n_batches = len(labels[0])
     n_steps = len(labels[0][0]) - 1
     initial_conditions = [comp[:, 0] for comp in labels]
 
-    predicted_batches = []
-    # If data is too large for max_batch_size, generate it in mulitple mini-batches
-    for i in tqdm(range(math.ceil(n_batches / max_batch_size)), desc="Batch", leave=False, disable=suppress_output):
-        initial_condition = tuple(comp[i * max_batch_size : (i + 1) * max_batch_size] for comp in initial_conditions)
-        predictions_subset = gen_preds(
-            model=model, initial_condition=initial_condition, n_steps=n_steps, device=device, suppress_output=suppress_output
-        )
-        predicted_batches.append(
-            predictions_subset
-        )  # predicted_batches is a list where we are now appending tuples of three predicted components
-
-    preds = tuple(np.concatenate(batched_comp_preds, axis=0) for batched_comp_preds in zip(*predicted_batches))
+    preds = gen_preds(
+        model=model,
+        initial_conditions=initial_conditions,
+        n_steps=n_steps,
+        max_batch_size=max_batch_size,
+        device=device,
+        suppress_output=suppress_output,
+    )
 
     return preds
 
@@ -765,8 +808,10 @@ def predict_site_diffs(labels, preds, site=0, pltargs: PLTArgs | None = None):
 def predict_rho_offsite_diff_magnitudes(rho_label, rho_pred, site=(0, 0), pltargs: PLTArgs | None = None):
     """Extract site from rho"""
 
-    rho_pred = rho_pred[..., *site]
-    rho_label = rho_label[..., *site]
+    # rho_pred = rho_pred[..., *site]
+    # rho_label = rho_label[..., *site]
+    rho_pred = rho_pred[(..., *site)]
+    rho_label = rho_label[(..., *site)]
 
     """ Get diff magnitude """
     diff = np.abs(rho_label - rho_pred)
@@ -1002,18 +1047,18 @@ def analyze_cdw_order_div(
     )
 
 
-def np_rmse(x: NDArray, y: NDArray) -> float:
+def np_rmse(x: NDArray, y: NDArray, axis: int | tuple[int] | None = None) -> float:
     """
     Calculate root mean squared error between two arrays.
 
     Args:
         x (NDArray): First array.
         y (NDArray): Second array (must have same shape as x).
-
+        axis (int | tuple[int] | None): Axis or axes along which the mean is computed. The default is to compute the mean of the flattened array.
     Returns:
         float: RMSE value.
     """
-    return (np.sqrt(np.mean(np.square(x - y)))).item()
+    return np.sqrt(np.mean(np.abs(np.square(x - y)), axis=axis))
 
 
 def stitch_images_grid(

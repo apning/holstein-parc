@@ -1,42 +1,39 @@
-# Standard library imports
-import math
-import warnings
 
-# Third-party imports
+import math
+
+
 import numpy as np
 import torch
-from torch import optim
-from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR, ChainedScheduler, LambdaLR, MultiplicativeLR
 
-# Local imports
+
 from src.modeling import CNNnd, HolsteinStepCombined
 from src.physics import calc_charge_order, calc_lattice_order
 from src.utils import get_off_diagonal
 
 from torch.optim.lr_scheduler import _LRScheduler
 
+
 class CosineAnnealingRestartWarmupLR(_LRScheduler):
     """
     Cosine annealing with warm restarts, each preceded by linear warmup.
     Optionally applies linear decay to entire schedule.
     """
-    def __init__(self, optimizer, stage_lengths, warmup_steps=500, eta_min=1e-5, 
-                 linear_decay=None, last_epoch=-1):
+
+    def __init__(self, optimizer, stage_lengths, warmup_steps=500, eta_min=1e-5, linear_decay=None, last_epoch=-1):
         self.stage_lengths = stage_lengths
         self.warmup_steps = warmup_steps
         self.eta_min = eta_min
         self.linear_decay = linear_decay if linear_decay is not None else 1.0
         self.total_steps = sum(stage_lengths)
-        
+
         # Build stage boundaries
         self.stage_starts = [0]
         for length in stage_lengths:
             self.stage_starts.append(self.stage_starts[-1] + length)
-        
-        super().__init__(optimizer, last_epoch)
-    
-    def get_lr(self):
 
+        super().__init__(optimizer, last_epoch)
+
+    def get_lr(self):
         # Find index of current stage
         current_step = self.last_epoch
         stage_idx = 0
@@ -44,10 +41,10 @@ class CosineAnnealingRestartWarmupLR(_LRScheduler):
             if current_step < start:
                 stage_idx = i
                 break
-        
+
         stage_start = self.stage_starts[stage_idx]
         step_in_stage = current_step - stage_start
-        
+
         # Compute base lr multiplier for this step
         if step_in_stage < self.warmup_steps:
             # Warmup
@@ -58,13 +55,11 @@ class CosineAnnealingRestartWarmupLR(_LRScheduler):
             cosine_step = step_in_stage - self.warmup_steps
             cosine_total = self.stage_lengths[stage_idx] - self.warmup_steps
             cosine_progress = cosine_step / cosine_total
-            
-            base_multiplier = self.eta_min + (1.0 - self.eta_min) * 0.5 * (
-                1 + np.cos(np.pi * cosine_progress)
-            )
-        
+
+            base_multiplier = self.eta_min + (1.0 - self.eta_min) * 0.5 * (1 + np.cos(np.pi * cosine_progress))
+
         decay_multiplier = 1.0 - (current_step / self.total_steps) * (1.0 - self.linear_decay)
-        
+
         return [base_lr * base_multiplier * decay_multiplier for base_lr in self.base_lrs]
 
 
@@ -88,28 +83,6 @@ def torch_RMSE(tnsr_1, tnsr_2) -> torch.Tensor:
         raise ValueError(f"torch_RMSE(): tnsr_1 has shape {tnsr_1.shape} but tnsr_2 has different shape {tnsr_2.shape}")
 
     return torch.sqrt(torch.mean(torch.abs(torch.square(tnsr_1 - tnsr_2))))
-
-
-def np_RMSE(arr_1, arr_2) -> np.ndarray:
-    """
-    Calculate root mean squared error between two arrays.
-
-    Compatible with complex dtypes by taking absolute value of squared differences.
-
-    Args:
-        arr_1 (np.ndarray): First array.
-        arr_2 (np.ndarray): Second array (must have same shape).
-
-    Returns:
-        np.ndarray: Scalar RMSE value.
-
-    Raises:
-        ValueError: If arrays have different shapes.
-    """
-    if arr_1.shape != arr_2.shape:
-        raise ValueError(f"numpy_RMSE(): arr_1 has shape {arr_1.shape} but arr_2 has different shape {arr_2.shape}")
-
-    return np.sqrt(np.mean(np.abs(np.square(arr_1 - arr_2))))
 
 
 def torch_RMS(tnsr) -> torch.Tensor:

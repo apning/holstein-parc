@@ -12,7 +12,7 @@ CIRRICULUM_NAMED_KWARGS = {
         {"epochs": 3, "n_step": 8, "noise": 18e-3},
         {"epochs": 25, "n_step": 16, "noise": 2e-2},
     ],
-    "deep_quench-2a": [ # tries to be faster
+    "deep_quench-2a": [  # tries to be faster
         {"epochs": 6, "n_step": 1, "noise": 5e-3, "virtual_epoch_multiplier": 4},
         {"epochs": 3, "n_step": 4, "noise": 1e-2, "virtual_epoch_multiplier": 4},
         {"epochs": 10, "n_step": 8, "noise": 2e-2},
@@ -26,6 +26,18 @@ CIRRICULUM_NAMED_KWARGS = {
         },
         {
             "epochs": 40,
+            "n_step": 8,
+            "noise": 2e-2,
+        },
+    ],
+    "shallow_quench-2a": [
+        {
+            "epochs": 20,
+            "n_step": 1,
+            "noise": 2e-2,
+        },
+        {
+            "epochs": 10,
             "n_step": 8,
             "noise": 2e-2,
         },
