@@ -49,7 +49,7 @@ CONFIG_NAMED_KWARGS = {
         "suppress_tqdm": True,
         "save_checkpoint_period": 1,
     },
-    "L_32-quench_0p5_0p8-steps_1200-training-v2": {
+    "L_32-quench_0p5_0p8-steps_1200-training-v2": { # This one faster and just as good
         "name": "L_32-quench_0p5_0p8-steps_1200-training-v2",
         # Data variables
         # "data_names": ["L-32-g_0p5_0p8-rd-1e-04-si_64-steps_1200-zero_mom-MID"],
