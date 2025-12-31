@@ -5,7 +5,7 @@ channels:
 dependencies:
   - python=3.11
   - pytorch
-  - numpy
+  - numpy<2
   - matplotlib
   - pillow
   - ipython
@@ -14,7 +14,7 @@ dependencies:
   - jupyterlab
   - pip
   - pip:
-      - -e .
+    - -e .
   # C++ toolchain for simulator (optional unless building qdyn)
   - compilers
   - make

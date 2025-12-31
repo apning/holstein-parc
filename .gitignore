@@ -13,6 +13,7 @@
 playground.ipynb
 .vscode/
 /slurm_scripts
+/scripts
 
 *.egg-info
 *_temp
@@ -21,3 +22,4 @@ playground.ipynb
 *.db
 *.p
 *.pkl
+*.tar.gz

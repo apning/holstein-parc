@@ -98,12 +98,17 @@ class Config:
     ## Settings that affect lr scheduler
     warmup_steps: int = 500  # The number of steps to warm up for at the start of each cosine restart
     eta_min_scalar: int = 1e-2  # The minimum learning rate multiplier to be used in the cosine annealing. eta_min value is lr * eta_min_scalar
+    lr_scheduler: str = "cosine_annealing_restarts"
+    # For use with cosine annealing restart with warmups scheduler
+    lr_scheduler_linear_decay_multiplier: float | None = None
+
 
     # If specified, the first block of the CNN will get a learning rate scaled by this coeff. The last block will get an unscaled learning.
     # And the blocks in-between will have their LR interpolated between the two
     # If None does not apply
     # Meant for fine-tuning where the earlier layers should get a lower LR
     fine_tuning_layerwise_lr_coeff: int | float | None = None
+
 
     """ Model details """
     channels: int = 128
@@ -134,7 +139,7 @@ class Config:
     suppress_tqdm: bool = False
     # Save checkpoint every certain number of epochs. This is separate from best epoch saving. if None will only do best epoch saving
     save_checkpoint_period: int | None = None
-    n_workers: int = 4  # n_workers for dataloader
+    n_workers: int = 0  # n_workers for dataloader
     notes: str | None = ""
     _config_name = None  # If config retrieved with src.get_settings.get_config, it will change this to indicate exactly how the particular config object was made
     # If True, will override all model kwargs except dropout via the one found from the same directory as a pretrained path

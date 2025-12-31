@@ -1,11 +1,9 @@
-# Standard library imports
 import io
 import math
 from collections import namedtuple
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-# Third-party imports
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -14,7 +12,6 @@ from PIL import Image, ImageOps
 from IPython.display import display
 from tqdm.auto import tqdm
 
-# Local imports
 from src.data_utils import unpickle_data
 from src.utils import select_best_device
 from src.physics import calc_charge_order, calc_lattice_order
@@ -295,7 +292,7 @@ def plot_comparison(
     # Display grid
     ax.grid(True)
     if not disable_text:
-        ax.legend()
+        ax.legend(fontsize=fontsize)
 
     if title is not None and not disable_text:
         ax.set_title(title, fontsize=fontsize)
@@ -330,172 +327,158 @@ def plot_comparison(
         return image
 
 
-def gen_multi_traj_batched_helper(
-    model, labels: Sequence[NDArray, NDArray, NDArray], device=None, suppress_output: bool = False
+def _gen_preds(
+    model,
+    initial_conditions: Sequence[NDArray, NDArray, NDArray],
+    n_steps: int,
+    device: torch.device,
+    suppress_output: bool = False,
 ) -> tuple[NDArray, NDArray, NDArray]:
     """
-    Helper method to generate multi-step trajectory predictions from a batch of initial conditions.
+    Core prediction logic for generating multi-step trajectory predictions.
 
     Args:
-        model: Neural network model for trajectory prediction.
-        labels (Sequence[NDArray]): Tuple of (rho, Q, P) label arrays.
-        device: PyTorch device to use for computation.
+        model: Prediction model (already on device and in eval mode).
+        initial_conditions (Sequence[NDArray, NDArray, NDArray]): Tuple of (rho, Q, P) label arrays representing the initial conditions. Shape of rho array should be [batch, L, L]. Shape of Q and P should be [batch, L]
+        n_steps (int): Number of steps to predict for
+        device (torch.device): PyTorch device.
         suppress_output (bool): If True, suppress progress bar output.
 
     Returns:
         tuple[NDArray, NDArray, NDArray]: Predicted trajectories (rho, Q, P).
     """
-    if device is None:
-        device = select_best_device("m")
-
-    n_steps = len(labels[0][0]) - 1
 
     # Prep input data
-
-    inputs = [comp[:, 0] for comp in labels]
-    preds = [[comp] for comp in inputs]
-    inputs = [torch.tensor(comp).to(device) for comp in inputs]
+    preds = [[comp] for comp in initial_conditions]
+    inputs = [torch.tensor(comp).to(device) for comp in initial_conditions]
 
     with torch.no_grad():
         for _ in tqdm(range(n_steps), desc="Steps", leave=False, disable=suppress_output):
             inputs = model(*inputs)
             [pred.append(comp.cpu().numpy()) for pred, comp in zip(preds, inputs)]
 
-    preds = [np.stack(pred, axis=1) for pred in preds]
+    preds = tuple(np.stack(pred, axis=1) for pred in preds)
 
     return preds
 
 
-def gen_multi_traj(
+def gen_preds(
     model,
-    data: Sequence[NDArray, NDArray, NDArray] | None = None,
-    data_path: str | None = None,
-    batch_slice: slice = slice(None),
-    max_batch_size: int = 64,
-    sim_start: int | None = None,
-    sim_end: int | None = None,
-    device=None,
+    initial_conditions: Sequence[NDArray, NDArray, NDArray],
+    n_steps: int,
+    max_batch_size: int | None = None,
+    device: None | torch.device = None,
     suppress_output: bool = False,
 ) -> tuple[NDArray, NDArray, NDArray]:
     """
-    Generate multiple trajectory predictions from a dataset of initial conditions.
-
-    Processes data in batches to handle large datasets efficiently.
+    Generate multi-step trajectory predictions from a batch of initial conditions.
 
     Args:
-        model: Neural network model for trajectory prediction.
-        data (Sequence[NDArray], optional): Pre-loaded data as (rho, Q, P) arrays.
-        data_path (str, optional): Path to pickled data file (if data not provided).
-        batch_slice (slice): Slice to select subset of simulations.
-        max_batch_size (int): Maximum batch size for GPU memory management.
-        sim_start (int, optional): Starting time step for each simulation.
-        sim_end (int, optional): Ending time step for each simulation.
-        device: PyTorch device to use for computation.
-        suppress_output (bool): If True, suppress progress bars.
+        model: Prediction model.
+        initial_conditions (Sequence[NDArray, NDArray, NDArray]): Tuple of (rho, Q, P) label arrays representing the initial conditions. Shape of rho array should be [batch, L, L]. Shape of Q and P should be [batch, L]
+        n_steps (int): Number of steps to predict for
+        max_batch_size (int | None): Maximum batch size. If None, process all data at once.
+        device (None | torch.device): PyTorch device. If None, one will automatically be chosen.
+        suppress_output (bool): If True, suppress progress bar output.
 
     Returns:
-        tuple[NDArray, NDArray, NDArray]: Tuple of (labels, predictions) for trajectories.
+        tuple[NDArray, NDArray, NDArray]: Predicted trajectories (rho, Q, P).
     """
+
+    # Shape checks
+    rho, Q, P = initial_conditions
+    if rho.ndim != 3:
+        raise ValueError(f"rho has invalid shape! Expected 3, got shape {rho.shape}")
+    if Q.ndim != 2:
+        raise ValueError(f"Q has invalid shape! Expected 2, got shape {Q.shape}")
+    if P.ndim != 2:
+        raise ValueError(f"P has invalid shape! Expected 2, got shape {P.shape}")
+
+    # Device
     if device is None:
         device = select_best_device("m")
-
-    if data is None and data_path is not None:
-        data = unpickle_data(data_path)
-    elif data is None and data_path is None:
-        raise ValueError("data and data_path both None")
-
-    # Get specified sims from data
-    labels = [comp[batch_slice] for comp in data]
-    # Slice for start and end time
-    labels = tuple(comp[:, sim_start:sim_end] for comp in labels)
-
-    n_batches = len(labels[0])
-
-    # Prep model
-    initial_training_mode = model.training
-    model.eval()
     model.to(device)
 
-    predicted_batches = []
+    # Set model to eval
+    was_training = model.training
+    model.eval()
+
+    n_batches = len(rho)
+    if max_batch_size is None:
+        max_batch_size = n_batches
+
     # If data is too large for max_batch_size, generate it in mulitple mini-batches
+    predicted_batches = []
     for i in tqdm(range(math.ceil(n_batches / max_batch_size)), desc="Batch", leave=False, disable=suppress_output):
-        labels_subset = tuple(comp[i * max_batch_size : (i + 1) * max_batch_size] for comp in labels)
-        predictions_subset = gen_multi_traj_batched_helper(
-            model=model, labels=labels_subset, device=device, suppress_output=suppress_output
+        initial_conditions_subset = tuple(
+            comp[i * max_batch_size : (i + 1) * max_batch_size] for comp in initial_conditions
         )
-        predicted_batches.append(
-            predictions_subset
-        )  # predicted_batches is a list where we are now appending tuples of three predicted components
+        predictions_subset = _gen_preds(
+            model=model,
+            initial_conditions=initial_conditions_subset,
+            n_steps=n_steps,
+            device=device,
+            suppress_output=suppress_output,
+        )
+        predicted_batches.append(predictions_subset)
 
     preds = tuple(np.concatenate(batched_comp_preds, axis=0) for batched_comp_preds in zip(*predicted_batches))
 
-    model.train(initial_training_mode)
+    model.train(was_training)
 
-    return labels, preds
+    return preds
 
 
-def gen_single_traj(model, data=None, data_path=None, sim_idx=0, sim_start=None, sim_end=None, device=None):
+def gen_preds_like(
+    model,
+    labels: Sequence[NDArray, NDArray, NDArray] | None = None,
+    labels_path: str | None = None,
+    max_batch_size: int = 64,
+    device: None | torch.device = None,
+    suppress_output: bool = False,
+) -> tuple[NDArray, NDArray, NDArray]:
     """
-    Generate a single trajectory prediction from an initial condition.
+    Generate predictions for the same number of steps as labels and using initial conditions from labels.
 
     Args:
         model: Neural network model for trajectory prediction.
-        data: Pre-loaded data as (rho, Q, P) arrays (optional).
-        data_path (str, optional): Path to pickled data file (if data not provided).
-        sim_idx (int): Index of simulation to use from the data.
-        sim_start (int, optional): Starting time step.
-        sim_end (int, optional): Ending time step.
-        device: PyTorch device to use for computation.
+        labels (Sequence[NDArray, NDArray, NDArray] | None): Pre-loaded labels as (rho, Q, P) arrays. Each should include both a batch and time step dim
+        labels_path (str | None): Path to pickled data file (if data not provided).
+        max_batch_size (int): Maximum batch size.
+        device (None | torch.device): PyTorch device. If None, one will automatically be chosen.
+        suppress_output (bool): If True, suppress progress bars.
 
     Returns:
-        tuple: (labels, predictions) where each is a tuple of (rho, Q, P) arrays.
+        tuple[NDArray, NDArray, NDArray]: Tuple of predictions.
     """
-    if device is None:
-        device = select_best_device("m")
 
-    if data is None and data_path is not None:
-        data = unpickle_data(data_path)
-    elif data is None and data_path is None:
-        raise ValueError("data and data_path both None")
+    if labels is None and labels_path is not None:
+        labels = unpickle_data(labels_path)
+    elif labels is None and labels_path is None:
+        raise ValueError("labels and labels_path both None")
 
-    # get specified sim from data
-    single_sim = get_sim(data=data, sim_idx=sim_idx, sim_start=sim_start, sim_end=sim_end)
+    ## Shape checks
+    rho, Q, P = labels
+    if rho.ndim != 4:
+        raise ValueError(f"rho has invalid shape! Expected 4, got shape {rho.shape}")
+    if Q.ndim != 3:
+        raise ValueError(f"Q has invalid shape! Expected 3, got shape {Q.shape}")
+    if P.ndim != 3:
+        raise ValueError(f"P has invalid shape! Expected 3, got shape {P.shape}")
 
-    initial_training_mode = model.training
+    n_steps = len(labels[0][0]) - 1
+    initial_conditions = [comp[:, 0] for comp in labels]
 
-    model.eval()
-    model.to(device)
+    preds = gen_preds(
+        model=model,
+        initial_conditions=initial_conditions,
+        n_steps=n_steps,
+        max_batch_size=max_batch_size,
+        device=device,
+        suppress_output=suppress_output,
+    )
 
-    # Prep and predict
-    all_rho, all_Q, all_P = single_sim
-
-    inputs_ = all_rho[0], all_Q[0], all_P[0]
-    inputs_ = (arr[np.newaxis, :] for arr in inputs_)
-    rho, Q, P = inputs_
-
-    all_rho_preds, all_Q_preds, all_P_preds = [rho], [Q], [P]
-
-    inputs_ = rho, Q, P
-    inputs_ = (torch.tensor(arr).to(device) for arr in inputs_)
-    rho, Q, P = inputs_
-
-    with torch.no_grad():
-        for _ in tqdm(range(len(all_rho) - 1)):
-            rho, Q, P = model(rho, Q, P)
-            all_rho_preds.append(rho.cpu().numpy())
-            all_Q_preds.append(Q.cpu().numpy())
-            all_P_preds.append(P.cpu().numpy())
-
-    all_rho_preds = np.concatenate(all_rho_preds, axis=0)
-    all_Q_preds = np.concatenate(all_Q_preds, axis=0)
-    all_P_preds = np.concatenate(all_P_preds, axis=0)
-
-    labels = all_rho, all_Q, all_P
-    preds = all_rho_preds, all_Q_preds, all_P_preds
-
-    model.train(initial_training_mode)
-
-    return labels, preds
+    return preds
 
 
 def compare_cdw_order_vis(labels, preds, pltargs: PLTArgs | None = None):
@@ -640,7 +623,7 @@ def compare_cdw_order_autocorrelation(
     return return_dict or None
 
 
-def plot_label_cdw_order_autocorrelation(labels, max_lag: int, group_avg: bool = False, pltargs: PLTArgs | None = None):
+def plot_label_cdw_order_autocorrelation(labels, max_lag: int, group_avg: bool = True, pltargs: PLTArgs | None = None):
     """
     Plot autocorrelation function of CDW order parameters for labels only.
 
@@ -825,8 +808,10 @@ def predict_site_diffs(labels, preds, site=0, pltargs: PLTArgs | None = None):
 def predict_rho_offsite_diff_magnitudes(rho_label, rho_pred, site=(0, 0), pltargs: PLTArgs | None = None):
     """Extract site from rho"""
 
-    rho_pred = rho_pred[..., *site]
-    rho_label = rho_label[..., *site]
+    # rho_pred = rho_pred[..., *site]
+    # rho_label = rho_label[..., *site]
+    rho_pred = rho_pred[(..., *site)]
+    rho_label = rho_label[(..., *site)]
 
     """ Get diff magnitude """
     diff = np.abs(rho_label - rho_pred)
@@ -896,7 +881,7 @@ def Q_and_P_diffs_at_step(labels, preds, step=1, pltargs: PLTArgs | None = None)
         return {"Q_img": Q_img, "P_img": P_img}
 
 
-def calc_autocorrelation(traj: np.ndarray, lag: int, group_avg: bool = False):
+def calc_autocorrelation(traj: np.ndarray, lag: int, group_avg: bool = True):
     """
     Calculate autocorrelation of a trajectory at a specific lag.
 
@@ -943,7 +928,7 @@ def calc_autocorrelation(traj: np.ndarray, lag: int, group_avg: bool = False):
     return autocorrelation
 
 
-def calc_autocorrelation_traj(traj: np.ndarray, max_lag: int, group_avg: bool = False):
+def calc_autocorrelation_traj(traj: np.ndarray, max_lag: int, group_avg: bool = True):
     """
     Calculate autocorrelation function for all lags from 0 to max_lag.
 
@@ -1062,18 +1047,18 @@ def analyze_cdw_order_div(
     )
 
 
-def np_rmse(x: NDArray, y: NDArray) -> float:
+def np_rmse(x: NDArray, y: NDArray, axis: int | tuple[int] | None = None) -> float:
     """
     Calculate root mean squared error between two arrays.
 
     Args:
         x (NDArray): First array.
         y (NDArray): Second array (must have same shape as x).
-
+        axis (int | tuple[int] | None): Axis or axes along which the mean is computed. The default is to compute the mean of the flattened array.
     Returns:
         float: RMSE value.
     """
-    return (np.sqrt(np.mean(np.square(x - y)))).item()
+    return np.sqrt(np.mean(np.abs(np.square(x - y)), axis=axis))
 
 
 def stitch_images_grid(
